@@ -136,8 +136,8 @@ def main(infiles,roifile,maskfile,outdir,nmaps,save_eta2=False,norm_flag=False,p
 		mask = maskImg.get_data()
 	except:
 		sys.exit('Cannot open ' + maskfile | '\nExiting.')
-	if len(mask.shape) != 3:
-		sys.exit(maskfile + ' is not a 3D image\nExiting.')
+	if len(mask.shape) != 3 and len(mask.shape) != 2:
+		sys.exit(maskfile + ' is not a volume nor cifti image\nExiting.')
 	
 	# Reshape the mask into a vector of size nVoxels
 	mask = np.reshape(mask,(nVoxels))
@@ -159,8 +159,8 @@ def main(infiles,roifile,maskfile,outdir,nmaps,save_eta2=False,norm_flag=False,p
 			data = dataImg.get_data()
 		except:
 			sys.exit('Cannot open ' + infile | '\nExiting.')
-		if len(data.shape) != 4:
-			sys.exit(infile + ' is not a 4D image\nExiting.')
+		if len(data.shape) != 4 and len(data.shape) != 3:
+			sys.exit(infile + ' is not a 4D image nor 3D cifti file\nExiting.')
 
 		# Assert absence of nans and infs
 		if np.any(np.isnan(data)) or np.any(np.isinf(data)):
@@ -244,40 +244,49 @@ def main(infiles,roifile,maskfile,outdir,nmaps,save_eta2=False,norm_flag=False,p
 			tmp = y[:,evec] - min(y[:,evec])
 			y[:,evec] = np.divide(tmp,max(tmp))
 
-	# Store the eigenmaps as a 4D nifti image
-	print('Writing connectopic maps to: ' + outdir)
-	outfile = outdir + "/" + out_base_name + ".cmaps.nii.gz"
-	yDat = np.zeros(shape=roidims+(nmaps,))
-	yDat = np.reshape(yDat,(np.prod(roidims),nmaps))
-	yDat[roiIndices,:] = y[:,1:nmaps+1]
-	yDat = np.reshape(yDat,roidims+(nmaps,))
-	yImg = nib.Nifti1Image(yDat,roiImg.get_affine(),roiImg.get_header())
-	try:
-		nib.save(yImg,outfile)
-	except:
-		sys.exit('Cannot save ' + outfile | '\nExiting.')
+            
+    # Store the eigenmaps as a 4D nifti or 3D cifti image
+    print('Writing connectopic maps to: ' + outdir)    
+    yDat = np.zeros(shape=roidims+(nmaps,))
+    yDat = np.reshape(yDat,(np.prod(roidims),nmaps))
+    yDat[roiIndices,:] = y[:,1:nmaps+1]
+    yDat = np.reshape(yDat,roidims+(nmaps,))
+    if roidims == 3:        
+        outfile = outdir + "/" + out_base_name + ".cmaps.nii.gz"
+        yImg = nib.Nifti1Image(yDat,roiImg.get_affine(),roiImg.get_header())
+    elif roidims == 2:
+        outfile = outdir + "/" + out_base_name + ".cmaps.dscalar.nii"
+        yImg = nib.Cifti2Image(yDat,roiImg.get_affine(),roiImg.get_header())
+    try:
+        nib.save(yImg,outfile)
+    except:
+        sys.exit('Cannot save ' + outfile | '\nExiting.')
 
-	# Optionally project eigenmaps onto mask by spatial regression
-	if proj_flag:
-		print('Computing projections onto mask...')
-		outfile = outdir + "/" + out_base_name + ".pmaps.nii.gz"		
-		YDat = np.zeros(shape=roidims+(nmaps,))
-		YDat = np.reshape(YDat,(np.prod(roidims),nmaps))
-		for evec in range(1,y.shape[1]):	
-			X = np.vstack([np.ones(y.shape[0]),y[:,evec].T])
-			beta = np.dot(np.linalg.pinv(X.T),A.T)	
-			Y = np.dot(B.T,beta.T)[:,1]
-			if norm_flag:
-				Y -= min(Y)
-				Y /= max(Y)
-			YDat[maskIndices,evec-1] = Y
-		print('Writing projection maps to: ' + outdir)
-		YDat = np.reshape(YDat,roidims+(nmaps,))
-		YImg = nib.Nifti1Image(YDat,roiImg.get_affine(),roiImg.get_header())
-		try:
-			nib.save(YImg,outfile)
-		except:
-			sys.exit('Cannot save ' + outfile | '\nExiting.')
+    # Optionally project eigenmaps onto mask by spatial regression
+    if proj_flag:
+        print('Computing projections onto mask...')
+        YDat = np.zeros(shape=roidims+(nmaps,))
+        YDat = np.reshape(YDat,(np.prod(roidims),nmaps))
+        for evec in range(1,y.shape[1]):	
+            X = np.vstack([np.ones(y.shape[0]),y[:,evec].T])
+            beta = np.dot(np.linalg.pinv(X.T),A.T)	
+            Y = np.dot(B.T,beta.T)[:,1]
+            if norm_flag:
+                Y -= min(Y)
+                Y /= max(Y)
+            YDat[maskIndices,evec-1] = Y
+        print('Writing projection maps to: ' + outdir)
+        YDat = np.reshape(YDat,roidims+(nmaps,))
+        if roidims == 3:
+            outfile = outdir + "/" + out_base_name + ".pmaps.nii.gz"		
+            YImg = nib.Nifti1Image(YDat,roiImg.get_affine(),roiImg.get_header())
+        elif roidims == 2:
+            outfile = outdir + "/" + out_base_name + ".cmaps.dscalar.nii"
+            yImg = nib.Cifti2Image(yDat,roiImg.get_affine(),roiImg.get_header())
+        try:
+            nib.save(YImg,outfile)
+        except:
+            sys.exit('Cannot save ' + outfile | '\nExiting.')
 
 	print("Done.")
 
@@ -296,4 +305,3 @@ if __name__ == "__main__":
 	parser.add_argument("--project",dest="proj_flag",action="store_true",help="Project maps onto mask")
 	args=parser.parse_args()
 	main(args.infiles,args.roifile,args.maskfile,args.outdir,args.nmaps,args.save_eta2,args.norm_flag,args.proj_flag)
-
