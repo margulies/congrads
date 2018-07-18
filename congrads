@@ -26,8 +26,8 @@ usage () { echo -e "\nUsage:\n$0 -i <input> -r <roi> -m <mask> -o <out> [options
 		   echo -e "\t-f <int>\tfit spatial model of order <int>"	 
 		   echo -e "\t-F <int>\tfit spatial model of order <int>"
 		   echo -e "\t\t\tto pre-estimated connectopic map(s)"
-           echo -e "\t-S\t\tsurface file name [gifti] for spatial model with cifti"
-		   echo -e "\t\t\tcompulsory arguments: -i -r -o\n"
+           echo -e "\t\t\tcompulsory arguments: -i -r -o"
+           echo -e "\t-S\t\tsurface file [gifti] for spatial model with cifti\n"		   
          }
 
 OPTIND=1
