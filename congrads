@@ -36,7 +36,7 @@ nev=1
 fit=0
 Fit=0
 
-while getopts "i:r:m:o:n:f:F:pzsS" opt; do
+while getopts "i:r:m:o:n:f:F:S:pzs" opt; do
 	case "$opt" in
 	i)	fun+=("$OPTARG")
 		;;
