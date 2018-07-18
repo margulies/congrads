@@ -234,7 +234,7 @@ if __name__ == "__main__":
     parser.add_argument("-r", help="mask file", dest="maskfile",required=True)
     parser.add_argument("-o", help="path to output directory", dest="outdir",required=True)
     parser.add_argument("-b <int>", help="model order", type=int, dest="basis", default=3)
-    parser.add_argument("-s", help="surface file", dest="surffile", default=None)
+    parser.add_argument("-S", help="surface file", dest="surffile", default=None)
     args = parser.parse_args()
     main(args.filename, args.maskfile, args.outdir, args.basis, args.surffile)
     

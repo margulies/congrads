@@ -26,6 +26,7 @@ usage () { echo -e "\nUsage:\n$0 -i <input> -r <roi> -m <mask> -o <out> [options
 		   echo -e "\t-f <int>\tfit spatial model of order <int>"	 
 		   echo -e "\t-F <int>\tfit spatial model of order <int>"
 		   echo -e "\t\t\tto pre-estimated connectopic map(s)"
+           echo -e "\t-S\t\tsurface file name [gifti] for spatial model with cifti"
 		   echo -e "\t\t\tcompulsory arguments: -i -r -o\n"
          }
 
@@ -35,7 +36,7 @@ nev=1
 fit=0
 Fit=0
 
-while getopts "i:r:m:o:n:f:F:pzs" opt; do
+while getopts "i:r:m:o:n:f:F:pzsS" opt; do
 	case "$opt" in
 	i)	fun+=("$OPTARG")
 		;;
@@ -56,6 +57,8 @@ while getopts "i:r:m:o:n:f:F:pzs" opt; do
 	f)  fit=$OPTARG
 		;;
 	F)  Fit=$OPTARG
+        ;;
+    S)  surf=$OPTARG
 	esac
 done
 
@@ -102,7 +105,7 @@ if [ ! $Fit -gt 0 ]; then
 
 	if [ $fit -gt 0 ]; then
 		cmap=${out}/$(basename "${roi}" .nii.gz).cmaps.nii.gz
-		fslpython trendsurf.py -i $cmap -r $roi -b $fit -o $out
+		fslpython trendsurf.py -i $cmap -r $roi -b $fit -o $out -S $surf
 	fi
 
 else
@@ -130,7 +133,7 @@ else
 	echo "Writing results to: $out"
 	mkdir -p $out
 
-	fslpython trendsurf.py -i $fun -r $roi -o $out -b $Fit 
+	fslpython trendsurf.py -i $fun -r $roi -o $out -b $Fit -S $surf
 
 fi
 
