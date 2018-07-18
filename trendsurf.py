@@ -22,9 +22,12 @@ def load_data(datafile,maskfile):
     data = dataImg.get_data()
     dim = data.shape
     if len(dim) <= 3:
-        dim = dim + (1,)
+        data = data.T
+        dim = data.shape
+        for i in range(4-len(dim)):
+            dim = (1,) + dim
     data = np.reshape(data,(np.prod(dim[0:3]),dim[3]))
-
+    print(dim)
     maskImg = nib.load(maskfile)
     mask = maskImg.get_data()
     mask = np.reshape(mask,(np.prod(dim[0:3])))
@@ -71,7 +74,69 @@ def create_basis(X,dimpoly):
 
     return Phi
 
-def main(filename,maskfile,outdir,basis,ard=False):
+
+def triangles_keep_cortex(triangles, cortex):
+    
+    input_shape = triangles.shape
+    triangle_is_in_cortex = np.all(np.reshape(np.in1d(triangles.ravel(), cortex), input_shape), axis=1)
+    cortex_triangles_old = np.array(triangles[triangle_is_in_cortex], dtype=np.int32)
+    new_index = np.digitize(cortex_triangles_old.ravel(), cortex, right=True)
+    cortex_triangles = np.array(np.arange(len(cortex))[new_index].reshape(cortex_triangles_old.shape), 
+                                dtype=np.int32)
+
+    return cortex_triangles
+
+def surf_dims(surf, cortex, viz=False):
+    import sklearn
+    from sklearn import manifold
+    import gdist
+    
+    surf = nib.load(surf)
+    vertices = surf.darrays[0].data 
+    triangles = surf.darrays[1].data
+    cortex_vertices = np.array(vertices[cortex], dtype=np.float64)
+    cortex_triangles = triangles_keep_cortex(triangles, cortex)
+
+    dist_mat = []
+    for i in range(cortex_vertices.shape[0]):
+        dist_mat.append(gdist.compute_gdist(cortex_vertices, cortex_triangles, 
+                                            source_indices = np.expand_dims(np.array(i,dtype=np.int32),axis=0)))
+    dist_mat = np.array(dist_mat)
+
+    dm = dist_mat / np.max(dist_mat)
+    dm = (dm - 1.0) * -1.0
+    dm_emb = manifold.Isomap(n_components=2).fit_transform(dm)
+        
+    return dm_emb 
+
+def load_data_cifti(datafile,maskfile, surf):
+
+    dataImg = nib.load(datafile)
+    data = dataImg.get_data().T    
+    maskImg = nib.load(maskfile)
+    mask = maskImg.get_data()
+    #mask = np.reshape(mask,(np.prod(dim[0:3])))
+    maskIndices = np.where(mask==1)[1]
+    data = data[maskIndices,:]
+    
+    # get two dimensions on surface from Isomap embedding:
+    world = surf_dims(surf, maskIndices)
+
+    return data,world,maskIndices
+
+def save_cifti(data, outfile, filename, maskIndices):
+    import subprocess, os
+    dataImg = nib.load(filename)
+    output = np.zeros((np.max(dataImg.get_data().shape), data.shape[1]))
+    output[maskIndices,:] = data
+    np.savetxt('temp_data.txt',output)
+    cmd = ['wb_command','-cifti-convert','-from-text','temp_data.txt', 
+            filename, outfile, '-reset-scalars']
+    subprocess.call(cmd)
+    os.remove('temp_data.txt')
+    
+
+def main(filename,maskfile,outdir,basis,surffile,ard=False):
 
     """ :outputs: * yhat - predictive mean
                   * ys2 - predictive variance
@@ -87,7 +152,10 @@ def main(filename,maskfile,outdir,basis,ard=False):
 
     # load data
     print("Processing data in",filename)
-    Y,X,maskIndices = load_data(filename,maskfile)
+    if surffile:
+        Y,X,maskIndices = load_data_cifti(filename,maskfile,surffile)
+    else:
+        Y,X,maskIndices = load_data(filename,maskfile)
     Y = np.round(10000*Y) / 10000  # truncate precision to avoid numerical probs
     if len(Y.shape) == 1:
         Y = Y[:,np.newaxis]
@@ -141,16 +209,22 @@ def main(filename,maskfile,outdir,basis,ard=False):
 
     # Write output
     print("Writing output ...")
-    out_base_name = outdir + "/" + filename.split('/')[-1].split('.nii')[0]
+    if surffile:
+        out_base_name = outdir + "/" + filename.split('/')[-1].split('.dscalar.nii')[0]
+    else:
+        out_base_name = outdir + "/" + filename.split('/')[-1].split('.dscalar.nii')[0]
     np.savetxt(out_base_name + ".tsm.trendcoeff.txt", m, delimiter='\t', fmt='%5.8f')
     np.savetxt(out_base_name + ".tsm.negloglik.txt", nlZ, delimiter='\t', fmt='%5.8f')
     np.savetxt(out_base_name + ".tsm.hyp.txt", hyp, delimiter='\t', fmt='%5.8f')
     np.savetxt(out_base_name + ".tsm.explainedvar.txt", ev, delimiter='\t', fmt='%5.8f')
     np.savetxt(out_base_name + ".tsm.rmse.txt", rmse, delimiter='\t', fmt='%5.8f')
     np.savetxt(out_base_name + ".tsm.trendcoeffvar.txt", bs2, delimiter='\t', fmt='%5.8f')    
-    save_nifti(yhat, out_base_name + '.tsm.yhat.nii.gz', filename, maskIndices)
-    save_nifti(ys2, out_base_name + '.tsm.ys2.nii.gz', filename, maskIndices)
-   
+    if surffile:
+        save_cifti(yhat, out_base_name + '.tsm.yhat.dscalar.nii', filename, maskIndices)
+        save_cifti(ys2, out_base_name + '.tsm.ys2.dscalar.nii', filename, maskIndices)
+    else:
+        save_nifti(yhat, out_base_name + '.tsm.yhat.nii.gz', filename, maskIndices)
+        save_nifti(ys2, out_base_name + '.tsm.ys2.nii.gz', filename, maskIndices)
 
 if __name__ == "__main__":
 
@@ -160,7 +234,8 @@ if __name__ == "__main__":
     parser.add_argument("-r", help="mask file", dest="maskfile",required=True)
     parser.add_argument("-o", help="path to output directory", dest="outdir",required=True)
     parser.add_argument("-b <int>", help="model order", type=int, dest="basis", default=3)
+    parser.add_argument("-s", help="surface file", dest="surffile", default=None)
     args = parser.parse_args()
-    main(args.filename, args.maskfile, args.outdir, args.basis)
+    main(args.filename, args.maskfile, args.outdir, args.basis, args.surffile)
     
 
