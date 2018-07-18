@@ -58,7 +58,7 @@ while getopts "i:r:m:o:n:f:F:pzsS" opt; do
 		;;
 	F)  Fit=$OPTARG
         ;;
-    S)  surf=$OPTARG
+    S)  surf="-S $OPTARG"
 	esac
 done
 
@@ -105,7 +105,7 @@ if [ ! $Fit -gt 0 ]; then
 
 	if [ $fit -gt 0 ]; then
 		cmap=${out}/$(basename "${roi}" .nii.gz).cmaps.nii.gz
-		fslpython trendsurf.py -i $cmap -r $roi -b $fit -o $out -S $surf
+		fslpython trendsurf.py -i $cmap -r $roi -b $fit -o $out $surf
 	fi
 
 else
@@ -133,7 +133,7 @@ else
 	echo "Writing results to: $out"
 	mkdir -p $out
 
-	fslpython trendsurf.py -i $fun -r $roi -o $out -b $Fit -S $surf
+	fslpython trendsurf.py -i $fun -r $roi -o $out -b $Fit $surf
 
 fi
 
